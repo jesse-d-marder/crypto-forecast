@@ -402,3 +402,125 @@ def calculate_classification_results(models, accuracies_train, accuracies_valida
                                                               'train_accuracy':accuracies_train['baseline']}, index = ['baseline_class'])])
 
     return avg_trade_model.sort_values(by='pct_avg_trade',ascending=False), validate_results
+
+def conventional_split(split_data, reg_models, class_models, features_to_use, features_to_scale):
+    
+    # Trading strategy results - dictionary to hold key for each cryptocurrency
+    avg_trade_model_results = {}
+    # Predictions from validate
+    class_validate_results = {}
+    reg_validate_results = {}
+
+    for k in split_data.keys():
+        print(f"Train/validate: {k}")
+        train, validate, test = split_data[k]
+        ### Iterate through regression models, uses existing train, validate, test split
+        # Specify regression models to test. Feature selection using recursive feature elimination is also available.
+
+        # Fits model using train and gets predictions for validate
+        rmses_train, rmses_validate, y_train, y_validate = predict_regression(reg_models, 
+                                                                                    train, 
+                                                                                    validate, 
+                                                                                    test, 
+                                                                                    features_to_use, 
+                                                                                    features_to_scale,
+                                                                                    perform_feature_selection=True,
+                                                                                    num_features = 5)
+        # Consolidates results into dataframe. Outputs average trade information for each model.
+        reg_avg_trade_model_results, reg_v_results =  calculate_regression_results(reg_models, rmses_train, rmses_validate, validate, y_validate)
+
+        reg_validate_results[k] = reg_v_results
+
+        # Fits model using train and gets predictions for validate
+        accuracies_train, accuracies_validate, y_train, y_validate = predict_classification(class_models, 
+                                                                                    train, 
+                                                                                    validate, 
+                                                                                    test, 
+                                                                                    features_to_use, 
+                                                                                    features_to_scale,
+                                                                                    perform_feature_selection=False)
+        # Put results into dataframe
+        class_avg_trade_model_results, class_v_results  =  calculate_classification_results(class_models, accuracies_train, accuracies_validate, validate, y_validate)
+
+        # Add classification results from standard data split
+        avg_trade_model_results[k]= reg_avg_trade_model_results.append(class_avg_trade_model_results).sort_values(by='pct_avg_trade',ascending=False)
+
+        class_validate_results[k] = class_v_results
+
+    conventional_split_model_results = pd.DataFrame()
+    for k in avg_trade_model_results.keys():
+        results = avg_trade_model_results[k]
+        results.index= [i+'_'+k for i in results.index]
+        conventional_split_model_results = pd.concat([conventional_split_model_results, results])
+
+    # Calculate the percent dropoff in accuracy or RMSE from train to validate. Lower RMSE and higher accuracy are better but generally trend opposite
+    conventional_split_model_results["dropoff"] = np.select([conventional_split_model_results.train_rmse.isna(),conventional_split_model_results.train_accuracy.isna()],
+                                             [(conventional_split_model_results.validate_accuracy - conventional_split_model_results.train_accuracy)/conventional_split_model_results.train_accuracy,
+                                              (conventional_split_model_results.validate_rmse - conventional_split_model_results.train_rmse)/conventional_split_model_results.train_rmse])
+    conventional_split_model_results.sort_values(by=['pct_avg_trade','dropoff'], ascending=False).head(10)[['pct_avg_trade', 'avg_trade', 'train_rmse','validate_rmse',
+           'train_accuracy','validate_accuracy','dropoff']]
+    
+    return reg_validate_results, class_validate_results, conventional_split_model_results
+
+# def rolling_models():
+    
+#     target = 'fwd_log_ret'
+#     all_product_results = {}
+
+#     # Specify regression models to test. Feature selection using recursive feature elimination is also available.
+#     reg_models = [SVR(kernel='linear',gamma=0.1)]#, LinearRegression(), TweedieRegressor(), LassoLars(), DecisionTreeRegressor()]
+
+#     for k in split_data.keys():
+#         reg_model_results = {}
+#         train, validate, test = split_data[k]
+#         for model_under_test in reg_models:
+
+#             print("testing",k,model_under_test)
+
+#             model_name = model_under_test.__repr__().split('()')[0]
+
+#             # Perform rolling predictions
+#             train_rolling_predictions, 
+#             train_rolling_actuals, 
+#             validate_rolling_predictions, 
+#             validate_rolling_actuals = model.get_rolling_predictions(train, 
+#                                                                     validate, 
+#                                                                     test, 
+#                                                                     model_under_test,
+#                                                                     target, 
+#                                                                     features_to_use, 
+#                                                                     features_to_scale,
+#                                                                     True)
+#             # Calculate the mean of all train RMSEs
+#             train_rmse = np.mean([mean_squared_error(train_rolling_actuals[i],train_rolling_predictions[i],squared=False) for i in range(len(train_rolling_actuals))])
+
+#             # Calculate validate RMSE
+#             validate_rmse = mean_squared_error(validate_rolling_actuals, [v[0] for v in validate_rolling_predictions], squared=False)
+
+#             print(model_name,"avg validate rmse",validate_rmse)
+
+#             # Create a dataframe with actual validate log returns, predictions, close prices, next day close prices
+#             validate_res = pd.DataFrame()
+#             validate_res['actual'] = validate_rolling_actuals
+#             validate_res['predictions'] = [v[0] for v in validate_rolling_predictions]
+
+#             # Set result index to validate's index
+#             validate_res.index = validate.index
+
+#             # Transfer close values over to results dataframe to allow for return calculation
+#             validate_res["close"] = validate.close
+#             validate_res["next_day_close"] = validate.close.shift(-1)
+#             # Create a column for whether we would go long or not (short) based on the sign of the predictions value
+#             validate_res["go_long"] = validate_res['predictions']>0
+#             # Calculate the return that day (assumes always goes long or short every day)
+#             validate_res["ret"] = np.where(validate_res["go_long"], validate_res.next_day_close-validate_res.close, validate_res.close-validate_res.next_day_close)
+#             validate_res["pct_ret"] = validate_res["ret"]/validate_res.close
+
+#             # Store validate results in dictionary
+#             reg_model_results[model_name] = validate_res
+#             reg_model_results[model_name+"_validate_rmse"] = validate_rmse
+#             reg_model_results[model_name+"_train_rmse"] = train_rmse
+
+#         # Append to all products dictionary 
+#         all_product_results[k] = reg_model_results
+
