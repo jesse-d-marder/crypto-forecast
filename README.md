@@ -17,15 +17,13 @@
 ---------------------------------------------------------------------
 ### Project Description and Goals
 
-The goal of this project was to compare the forecasting ability of machine learning models in predicting crytocurrency returns. The profitability of trading strategies built from the results was also evaluated. Three separate currencies were evaluated - Bitcoin, Ethereum, and Litecoin - over the same time period. 
+The goal of this project was to compare the forecasting ability of machine learning models in predicting cryptocurrency returns. The profitability of trading strategies built from the results was also evaluated. Three separate currencies were evaluated - Bitcoin, Ethereum, and Litecoin - over the same time period. 
 
 ### Initial Questions
 
 1. Are past returns predictive of future returns for cryptocurrencies?
 2. Is there a relationship between volatility and returns?
 3. Are there differences in log returns based on the day of the week?
-4. Are there differences in log returns based on the month of the year?
-5. Are there seasonal tendencies to log returns?
 
 ### Data Dictionary
 
@@ -44,7 +42,7 @@ For this project I followed the data science pipeline:
 
 Planning: I wanted to roughly follow the methodology used by Helder Sebastiao and Pedro Godinho in their article "Forecasting and trading cryptocurrencies with machine learning under changing market conditions," published 06 Jan 2021 (https://rdcu.be/cMaLB). The authors examined the predictability of three major crytocurrencies - Bitcoin, Ethereum, and Litecoin - using machine learning techniques for the period April 15, 2015 - March 03, 2019. In the original version of this project (completed as part of the Codeup Data Science curriculum) I focused solely on Bitcoin due to time constraints. This repository expanded on that initial effort to compare Bitcoin with Litecoin and Ethereum. 
 
-Acquire: The data for this project consists of daily open, high, low, and close prices as well as volume data for Bitcoin, Ethereum, and Litecoin from 2016-08-24 - 2022-04-21 and was acquired using the Coinbase Pro API. An account and API key are required for access. Scripts to acquire this data are included in acquire.py. Without a Coinbase Pro account the data can be accessed via the csvs included in the repository. 
+Acquire: The data for this project consists of daily open, high, low, and close prices as well as volume data for Bitcoin, Ethereum, and Litecoin from 2016-08-24 - 2022-04-21 and was acquired using the Coinbase Pro API. An account and API key are required for access. Scripts to acquire this data are included in acquire.py. Without a Coinbase Pro account the data can be accessed via the csvs included in the repository. Data starts and ends at the same data for all currencies for better comparison. 
 
 Prepare: The prepare.py module cleans the data and also contains a function to add features and targets (regression and classification) to the dataframes. Anomalous values (particularly with the low price on specific days) were explored and handled. 
 
@@ -61,7 +59,10 @@ Delivery: This is in the form of this github repository. I am happy to talk thro
 4. You should be able to run predict_crypto.ipynb.
 
 ### Key Findings 
-- Coming soon
+- For conventional data split (50/30/20 train/validate/test):
+    - Logistic Regression with C=1 is best for LTC (0.006330% average trade) but exhibits high dropoff in accuracy from train to validate. Thus C=0.1 would be preferred as it is the next best in terms of average percent trade but has about 1/5 of the dropoff in accuracy.
+    - LassoLars with default hyperparameters is best for Ethereum, but it is only slightly above the baseline (0.003964% average trade)
+    - Tweedie Regressor is best for Bitcoin, with an average percent trade of 0.003738%
 
 ### Conclusion and Recommendations
 - Coming soon
