@@ -69,9 +69,7 @@ Delivery: This is in the form of this github repository. I am happy to talk thro
 
 ### Future work
 - Explore other features and feature combinations that may be predictive of returns. The original paper also included blockchain information (such as on-chain volume, active addresses, and block sizes) as inputs, though for most of the most successful models only returns, volatility, and daily dummies were actually used. 
-- Explore how ensembles of models would affect returns. 
 - Test additional hyperparameters for the models and different algorithms. Based on time and resource constraints some models used in the paper could not be tested, particularly for the single-step prediction method. 
-- Test Ethereum and Litecoin. This data was original downloaded and intended to be tested but due to time constraints was not.
 - Generate additional trading statistics for strategies based on the model results. Here I only included average trade but other metrics such as win rate, Sharpe ratio, and max drawdown are important to know prior to implementing in live trading. 
 - Test ensemble methods of determining whether a trade should be taken, per the paper. These were shown to be more successful than using a single model alone to make trading decisions. 
 - Test models with higher frequency data
