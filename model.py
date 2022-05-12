@@ -462,65 +462,188 @@ def conventional_split(split_data, reg_models, class_models, features_to_use, fe
     
     return reg_validate_results, class_validate_results, conventional_split_model_results
 
-# def rolling_models():
+def rolling_reg_models(split_data, reg_models, target, features_to_use, features_to_scale):
+    """Performs rolling regression fit/test from split_data and for models indicated in reg_models """
+    # target = 'fwd_log_ret'
+    all_product_results = {}
+
+    # Specify regression models to test. Feature selection using recursive feature elimination is also available.
+    # reg_models = [SVR(kernel='linear',gamma=0.1)]#, LinearRegression(), TweedieRegressor(), LassoLars(), DecisionTreeRegressor()]
+
+    for k in split_data.keys():
+        reg_model_results = {}
+        train, validate, test = split_data[k]
+        for model_under_test in reg_models:
+
+            print("testing",k,model_under_test)
+
+            model_name = model_under_test.__repr__().split('()')[0]
+
+            # Perform rolling predictions
+            train_rolling_predictions, train_rolling_actuals, validate_rolling_predictions, validate_rolling_actuals = get_rolling_predictions(train, 
+                                                                    validate, 
+                                                                    test, 
+                                                                    model_under_test,
+                                                                    target, 
+                                                                    features_to_use, 
+                                                                    features_to_scale,
+                                                                    True)
+            # Calculate the mean of all train RMSEs
+            train_rmse = np.mean([mean_squared_error(train_rolling_actuals[i],train_rolling_predictions[i],squared=False) for i in range(len(train_rolling_actuals))])
+
+            # Calculate validate RMSE
+            validate_rmse = mean_squared_error(validate_rolling_actuals, [v[0] for v in validate_rolling_predictions], squared=False)
+
+            print(model_name,"avg validate rmse",validate_rmse)
+
+            # Create a dataframe with actual validate log returns, predictions, close prices, next day close prices
+            validate_res = pd.DataFrame()
+            validate_res['actual'] = validate_rolling_actuals
+            validate_res['predictions'] = [v[0] for v in validate_rolling_predictions]
+
+            # Set result index to validate's index
+            validate_res.index = validate.index
+
+            # Transfer close values over to results dataframe to allow for return calculation
+            validate_res["close"] = validate.close
+            validate_res["next_day_close"] = validate.close.shift(-1)
+            # Create a column for whether we would go long or not (short) based on the sign of the predictions value
+            validate_res["go_long"] = validate_res['predictions']>0
+            # Calculate the return that day (assumes always goes long or short every day)
+            validate_res["ret"] = np.where(validate_res["go_long"], validate_res.next_day_close-validate_res.close, validate_res.close-validate_res.next_day_close)
+            validate_res["pct_ret"] = validate_res["ret"]/validate_res.close
+
+            # Store validate results in dictionary
+            reg_model_results[model_name] = validate_res
+            reg_model_results[model_name+"_validate_rmse"] = validate_rmse
+            reg_model_results[model_name+"_train_rmse"] = train_rmse
+
+        # Append to all products dictionary 
+        all_product_results[k] = reg_model_results
+        
+    return all_product_results
+        
+def consolidate_rolling_reg(all_product_results):
+    """ Create dataframe of results """
+    avg_trades = []
+    avg_pct_trade = []
+    train_rmses = []
+    validate_rmses = []
+    indices = []
+    # iterate through each key in regression model results dictionary
+    for k in all_product_results.keys():
+        for key in all_product_results[k]:
+
+            # Store RMSE and avg trade data
+            if '_train_rmse' in key:
+                train_rmses.append(all_product_results[k][key])
+            elif '_validate_rmse' in key:
+                validate_rmses.append(all_product_results[k][key])
+            else:
+                # Add average trade, average percent trade, and index name
+                avg_trades.append(all_product_results[k][key].ret.mean())
+                avg_pct_trade.append(all_product_results[k][key].pct_ret.mean())
+                indices.append(key+"_"+k+"_single_step")
+
+    reg_model_results_df = pd.DataFrame(data={'avg_trade':avg_trades,
+                                              'pct_avg_trade':avg_pct_trade,
+                                              'train_rmse':train_rmses,
+                                              'validate_rmse':validate_rmses}, index = indices)
+    reg_model_results_df["dropoff"] = (reg_model_results_df.validate_rmse - reg_model_results_df.train_rmse)/reg_model_results_df.train_rmse
+
+
+    return reg_model_results_df
+
+
+def rolling_class_models(split_data, class_models, target, features_to_use, features_to_scale):
     
-#     target = 'fwd_log_ret'
-#     all_product_results = {}
+    # class_models = [LogisticRegression(C=10), 
+    #             DecisionTreeClassifier(max_depth=None),
+    #             KNeighborsClassifier(n_neighbors=10), 
+    #             KNeighborsClassifier(n_neighbors=100), 
+    #             KNeighborsClassifier(n_neighbors=1000)]
+    class_model_results = {}
+    all_product_class_results = {}
+    # target = 'fwd_close_positive'
 
-#     # Specify regression models to test. Feature selection using recursive feature elimination is also available.
-#     reg_models = [SVR(kernel='linear',gamma=0.1)]#, LinearRegression(), TweedieRegressor(), LassoLars(), DecisionTreeRegressor()]
+    for k in split_data.keys():
+        train, validate, test = split_data[k]
+        for model_under_test in class_models:
 
-#     for k in split_data.keys():
-#         reg_model_results = {}
-#         train, validate, test = split_data[k]
-#         for model_under_test in reg_models:
+            model_name = model_under_test.__repr__().split('()')[0]
 
-#             print("testing",k,model_under_test)
+            train_rolling_predictions, train_rolling_actuals, validate_rolling_predictions, validate_rolling_actuals = get_rolling_predictions(train,validate,test, model_under_test, target, features_to_use, features_to_scale, False)
 
-#             model_name = model_under_test.__repr__().split('()')[0]
+            # Calculate validate accuracy
+            validate_accuracy = accuracy_score(validate_rolling_actuals, [v[0] for v in validate_rolling_predictions])
 
-#             # Perform rolling predictions
-#             train_rolling_predictions, 
-#             train_rolling_actuals, 
-#             validate_rolling_predictions, 
-#             validate_rolling_actuals = model.get_rolling_predictions(train, 
-#                                                                     validate, 
-#                                                                     test, 
-#                                                                     model_under_test,
-#                                                                     target, 
-#                                                                     features_to_use, 
-#                                                                     features_to_scale,
-#                                                                     True)
-#             # Calculate the mean of all train RMSEs
-#             train_rmse = np.mean([mean_squared_error(train_rolling_actuals[i],train_rolling_predictions[i],squared=False) for i in range(len(train_rolling_actuals))])
+            print(k, model_name,"validate accuracy",validate_accuracy)
 
-#             # Calculate validate RMSE
-#             validate_rmse = mean_squared_error(validate_rolling_actuals, [v[0] for v in validate_rolling_predictions], squared=False)
+            # Create a dataframe with actual validate log returns, predictions, close prices, next day close prices
+            validate_res = pd.DataFrame()
+            validate_res['actual'] = validate_rolling_actuals
+            validate_res['predictions'] = [v[0] for v in validate_rolling_predictions]
 
-#             print(model_name,"avg validate rmse",validate_rmse)
+            validate_res.index = validate.index
 
-#             # Create a dataframe with actual validate log returns, predictions, close prices, next day close prices
-#             validate_res = pd.DataFrame()
-#             validate_res['actual'] = validate_rolling_actuals
-#             validate_res['predictions'] = [v[0] for v in validate_rolling_predictions]
+            validate_res["close"] = validate.close
+            validate_res["next_day_close"] = validate.close.shift(-1)
+            # Create a column saying whether we would go long or not (short) based on the 
+            validate_res["go_long"] = validate_res['predictions']>0
+            # Calculate the return that day (assumes goes long or short every day)
+            validate_res["ret"] = np.where(validate_res["go_long"], validate_res.next_day_close-validate_res.close, validate_res.close-validate_res.next_day_close)
+            validate_res["pct_ret"] = validate_res["ret"]/validate_res.close
 
-#             # Set result index to validate's index
-#             validate_res.index = validate.index
+            class_model_results[model_name] = validate_res
+            class_model_results[model_name+"_accuracy"] = validate_accuracy
 
-#             # Transfer close values over to results dataframe to allow for return calculation
-#             validate_res["close"] = validate.close
-#             validate_res["next_day_close"] = validate.close.shift(-1)
-#             # Create a column for whether we would go long or not (short) based on the sign of the predictions value
-#             validate_res["go_long"] = validate_res['predictions']>0
-#             # Calculate the return that day (assumes always goes long or short every day)
-#             validate_res["ret"] = np.where(validate_res["go_long"], validate_res.next_day_close-validate_res.close, validate_res.close-validate_res.next_day_close)
-#             validate_res["pct_ret"] = validate_res["ret"]/validate_res.close
+                # Create baseline dataframe
+            baseline = pd.DataFrame(index = validate.index)
+            baseline["close"] = validate.close
+            baseline["next_day_close"] = validate.close.shift(-1)
+            # Just predict most common value
+            baseline["predictions"] = train.fwd_close_positive.mode()[0]
+            # Where prediction is true, go long
+            baseline["go_long"] = baseline["predictions"]
+            # Calculate the return that day (assumes always goes long or short every day)
+            baseline["ret"] = np.where(baseline["go_long"], baseline.next_day_close-baseline.close, baseline.close-baseline.next_day_close)
 
-#             # Store validate results in dictionary
-#             reg_model_results[model_name] = validate_res
-#             reg_model_results[model_name+"_validate_rmse"] = validate_rmse
-#             reg_model_results[model_name+"_train_rmse"] = train_rmse
+            class_model_results["baseline"] = baseline
+            
+        all_product_class_results[k] = class_model_results
 
-#         # Append to all products dictionary 
-#         all_product_results[k] = reg_model_results
+    return all_product_class_results
 
+def consolidate_rolling_class(all_product_class_results):
+    """ Create dataframe of rolling classification results """
+    avg_trades = []
+    accuracies = []
+    indices = []
+    for k in all_product_class_results.keys():
+        for key in all_product_class_results[k]:
+
+            if '_accuracy' in key:
+                accuracies.append(all_product_class_results[k][key])
+            elif key == 'baseline':
+                
+                # Calculate baseline accuracy
+                if class_res_df[k][key].predictions.mode()[0]:
+                    # If mode is true (baseline True)
+                    baseline_accuracy = (class_res_df[[k][key].ret>0).mean()
+                else:
+                    # If mode is False (baseline False)
+                    baseline_accuracy = 1-(class_res_df[k][key].ret>0).mean()
+
+                accuracies.append(baseline_accuracy)
+                avg_trades.append(all_product_class_results[k][key].ret.mean())
+                indices.append(key+"_single_step")
+            else:
+                avg_trades.append(all_product_class_results[k][key].ret.mean())
+                indices.append(key+"_"+k+"_single_step")
+
+    # Single step classification results
+    class_model_results_df = pd.DataFrame(data={'avg_trade':avg_trades,'accuracy':accuracies}, index = indices)
+
+    # avg_trade_model_results = avg_trade_model_results.append(class_model_results_df)
+
+    return class_model_results_df
