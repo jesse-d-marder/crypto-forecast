@@ -4,5 +4,5 @@ env_tradestation.py
 play*
 explore*
 data_retriever*
-arima*
-coinbase*
+arima.ipynb
+coinbase.ipynb
