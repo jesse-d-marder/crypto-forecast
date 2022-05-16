@@ -12,6 +12,7 @@ from sklearn.feature_selection import RFE
 def evaluate_arima_model(train, test, target, arima_order):
     """ Evaluates an ARIMA model based on arima_order argument, train set, test set, and target. 
     Outputs error, actual test values, and predictions for every timestep in test"""
+    # Set the target as a series
     train_target = train[target]
     test_target = test[target]
     history = [x for x in train_target]
@@ -121,7 +122,7 @@ def get_top_features(X_train_scaled, y_train, model, target, n_features):
 def predict_regression(models, train, validate, test, features_to_use, features_to_scale, perform_feature_selection, num_features):
     """Fits and predicts using inputted list of models. Outputs RMSE results, y_train, and y_validate with individual model results"""
     target = 'fwd_log_ret'
-    
+    # Perform scaling
     X_train_scaled, X_validate_scaled, X_test_scaled, y_train, y_validate, y_test = scale_datasets(train, 
                                                                                                    validate, 
                                                                                                    test, 
@@ -286,7 +287,7 @@ def get_rolling_predictions(train, validate, test, model_under_test, target, fea
         X_train_scaled_featured_rolled = X_train_scaled_featured_rolled.iloc[1:]
         y_train_rolled= y_train_rolled.iloc[1:]
 
-        # Add the latest row from X validate and y validate
+        # Add the latest row from X validate and y validate onto train
         X_train_scaled_featured_rolled = X_train_scaled_featured_rolled.append(X_validate_scaled_featured_rolled.iloc[validate_row])
         y_train_rolled = y_train_rolled.append(y_validate.iloc[validate_row])
     
@@ -404,7 +405,9 @@ def calculate_classification_results(models, accuracies_train, accuracies_valida
     return avg_trade_model.sort_values(by='pct_avg_trade',ascending=False), validate_results
 
 def conventional_split(split_data, reg_models, class_models, features_to_use, features_to_scale):
-    
+    """ Performs model training and testing for the conventional data split (not single step. 
+    Returns results of modeling - dictionaries for classification and regression results on validate and a dataframe
+    of results for all models."""
     # Trading strategy results - dictionary to hold key for each cryptocurrency
     avg_trade_model_results = {}
     # Predictions from validate
@@ -524,7 +527,7 @@ def rolling_reg_models(split_data, reg_models, target, features_to_use, features
     return all_product_results
         
 def consolidate_rolling_reg(all_product_results):
-    """ Create dataframe of results """
+    """ Create dataframe of results from the single step forecasting"""
     avg_trades = []
     avg_pct_trade = []
     train_rmses = []
@@ -556,15 +559,10 @@ def consolidate_rolling_reg(all_product_results):
 
 
 def rolling_class_models(split_data, class_models, target, features_to_use, features_to_scale):
-    
-    # class_models = [LogisticRegression(C=10), 
-    #             DecisionTreeClassifier(max_depth=None),
-    #             KNeighborsClassifier(n_neighbors=10), 
-    #             KNeighborsClassifier(n_neighbors=100), 
-    #             KNeighborsClassifier(n_neighbors=1000)]
+    """Performs rolling classification fit/test from split_data and for models indicated in reg_models """
+
     class_model_results = {}
     all_product_class_results = {}
-    # target = 'fwd_close_positive'
 
     for k in split_data.keys():
         train, validate, test = split_data[k]
@@ -573,6 +571,9 @@ def rolling_class_models(split_data, class_models, target, features_to_use, feat
             model_name = model_under_test.__repr__().split('()')[0]
 
             train_rolling_predictions, train_rolling_actuals, validate_rolling_predictions, validate_rolling_actuals = get_rolling_predictions(train,validate,test, model_under_test, target, features_to_use, features_to_scale, False)
+            
+            # Calculate the mean of all train accuracies
+            train_accuracy = np.mean([accuracy_score(train_rolling_actuals[i],train_rolling_predictions[i]) for i in range(len(train_rolling_actuals))])
 
             # Calculate validate accuracy
             validate_accuracy = accuracy_score(validate_rolling_actuals, [v[0] for v in validate_rolling_predictions])
@@ -595,7 +596,8 @@ def rolling_class_models(split_data, class_models, target, features_to_use, feat
             validate_res["pct_ret"] = validate_res["ret"]/validate_res.close
 
             class_model_results[model_name] = validate_res
-            class_model_results[model_name+"_accuracy"] = validate_accuracy
+            class_model_results[model_name+"_validate_accuracy"] = validate_accuracy
+            class_model_results[model_name+"_train_accuracy"] = train_accuracy
 
                 # Create baseline dataframe
             baseline = pd.DataFrame(index = validate.index)
@@ -607,6 +609,9 @@ def rolling_class_models(split_data, class_models, target, features_to_use, feat
             baseline["go_long"] = baseline["predictions"]
             # Calculate the return that day (assumes always goes long or short every day)
             baseline["ret"] = np.where(baseline["go_long"], baseline.next_day_close-baseline.close, baseline.close-baseline.next_day_close)
+            baseline["pct_ret"] = baseline["ret"]/baseline.close
+
+
 
             class_model_results["baseline"] = baseline
             
@@ -617,33 +622,43 @@ def rolling_class_models(split_data, class_models, target, features_to_use, feat
 def consolidate_rolling_class(all_product_class_results):
     """ Create dataframe of rolling classification results """
     avg_trades = []
-    accuracies = []
+    avg_pct_trades = []
+    train_accuracies = []
+    validate_accuracies = []
     indices = []
+    
     for k in all_product_class_results.keys():
         for key in all_product_class_results[k]:
-
-            if '_accuracy' in key:
-                accuracies.append(all_product_class_results[k][key])
+            # print(k, key)
+            if '_train_accuracy' in key:
+                train_accuracies.append(all_product_class_results[k][key])
+            elif '_validate_accuracy' in key:
+                validate_accuracies.append(all_product_class_results[k][key])
             elif key == 'baseline':
-                
                 # Calculate baseline accuracy
-                if class_res_df[k][key].predictions.mode()[0]:
+                if all_product_class_results[k][key].predictions.mode()[0]: # Get the mode of predictions
                     # If mode is true (baseline True)
-                    baseline_accuracy = (class_res_df[[k][key].ret>0).mean()
+                    baseline_accuracy = (all_product_class_results[k][key].ret>0).mean()
                 else:
                     # If mode is False (baseline False)
-                    baseline_accuracy = 1-(class_res_df[k][key].ret>0).mean()
-
-                accuracies.append(baseline_accuracy)
+                    baseline_accuracy = 1-(all_product_class_results[k][key].ret>0).mean()
+                    
+                train_accuracies.append(baseline_accuracy)
+                validate_accuracies.append(baseline_accuracy)
                 avg_trades.append(all_product_class_results[k][key].ret.mean())
+                avg_pct_trades.append(all_product_class_results[k][key].pct_ret.mean())
                 indices.append(key+"_single_step")
             else:
                 avg_trades.append(all_product_class_results[k][key].ret.mean())
+                avg_pct_trades.append(all_product_class_results[k][key].pct_ret.mean())
                 indices.append(key+"_"+k+"_single_step")
 
     # Single step classification results
-    class_model_results_df = pd.DataFrame(data={'avg_trade':avg_trades,'accuracy':accuracies}, index = indices)
-
+    class_model_results_df = pd.DataFrame(data={'avg_trade':avg_trades,
+                                                'pct_avg_trade': avg_pct_trades,
+                                                'train_accuracy':train_accuracies,
+                                               'validate_accuracy':validate_accuracies}, index = indices)
+    class_model_results_df["dropoff"] = (class_model_results_df.validate_accuracy - class_model_results_df.train_accuracy)/class_model_results_df.train_accuracy
     # avg_trade_model_results = avg_trade_model_results.append(class_model_results_df)
 
     return class_model_results_df

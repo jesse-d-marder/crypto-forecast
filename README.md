@@ -11,8 +11,7 @@
 - Conclusion
 ### 2. Final report (predict_crypto.ipynb)
 ### 3. Acquire and Prepare modules (acquire.py, prepare.py)
-### 4. Exploration & modeling notebooks (explore.ipynb, model.ipynb)
-### 5. Functions to support exploration and modeling work (model.py)
+### 4. Functions to support exploration and modeling work (model.py)
 
 ---------------------------------------------------------------------
 ### Project Description and Goals
@@ -53,19 +52,19 @@ Model: Multiple classification and regression machine learning models were inves
 Delivery: This is in the form of this github repository. I am happy to talk through my results with anyone interested and collaborate on any projects related to trading.
 
 ### Steps to Reproduce
-1. You will need an env.py file that contains the passphrase, secret_key and api_key of your Coinbase PRO account. Store that env file locally in the repository. Without an account you can read in the data from the csvs. 
+1. You will need an env.py file that contains the passphrase, secret_key and api_key of your Coinbase PRO account. Store that env file locally in the repository. Without an account you can read in the data from the csvs but ensure there are no env imports. 
 2. Clone my repository. Confirm .gitignore is hiding your env.py file.
 3. Libraries used are pandas, matplotlib, scipy, sklearn, seaborn, and numpy.
 4. You should be able to run predict_crypto.ipynb.
 
-### Key Findings 
+### Key Findings and Conclusion
 - For conventional data split (50/30/20 train/validate/test):
     - Logistic Regression with C=1 is best for LTC (0.006330% average trade) but exhibits high dropoff in accuracy from train to validate. Thus C=0.1 would be preferred as it is the next best in terms of average percent trade but has about 1/5 of the dropoff in accuracy.
     - LassoLars with default hyperparameters is best for Ethereum, but it is only slightly above the baseline (0.003964% average trade)
     - Tweedie Regressor is best for Bitcoin, with an average percent trade of 0.003738%
-
-### Conclusion and Recommendations
-- Coming soon
+- Single Step forecasting did worse than nearly every model forecasting using the standard train/validate/test split method, which seems surprising and will be investigated further. Only 3 single step models cracked the top 20.
+- Most models did worse than the baselines.
+- Higher accuracy and lower RMSE scores did not always result in a better performing model on an average trade basis.
 
 ### Future work
 - Explore other features and feature combinations that may be predictive of returns. The original paper also included blockchain information (such as on-chain volume, active addresses, and block sizes) as inputs, though for most of the most successful models only returns, volatility, and daily dummies were actually used. 
